@@ -14,6 +14,29 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+// FUNGSI BARU: Untuk memperbarui tampilan tombol
+export async function setNotificationButtonState() {
+  const notifButton = document.getElementById("notification-toggle");
+  if (!notifButton) return;
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+
+    if (subscription) {
+      notifButton.textContent = "Matikan Notifikasi";
+      notifButton.dataset.subscribed = "true";
+      notifButton.classList.remove("btn-outline");
+    } else {
+      notifButton.textContent = "Aktifkan Notifikasi";
+      notifButton.dataset.subscribed = "false";
+      notifButton.classList.add("btn-outline");
+    }
+  } catch (error) {
+    console.error('Gagal memeriksa status langganan', error);
+  }
+}
+
 // Fungsi utama untuk meminta izin dan berlangganan
 export async function requestNotificationPermission() {
   if (!('Notification' in window) || !('PushManager' in window)) {
@@ -21,32 +44,31 @@ export async function requestNotificationPermission() {
     return;
   }
 
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    alert("Izin notifikasi tidak diberikan.");
-    return;
-  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      alert("Izin notifikasi tidak diberikan.");
+      return;
+    }
 
-  const registration = await navigator.serviceWorker.ready;
-  let subscription = await registration.pushManager.getSubscription();
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
 
-  if (!subscription) {
-    // Jika belum berlangganan, buat langganan baru
-    try {
+    if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
-      
-      // Kirim subscription ke server Anda
-      sendSubscriptionToServer(subscription);
-    } catch (error) {
-      console.error('Gagal berlangganan push notification:', error);
     }
-  } else {
-    // Jika sudah berlangganan
-    console.log('Sudah berlangganan:', subscription);
-    // (Anda bisa tambahkan logika untuk "disable" jika tombol di-toggle)
+    
+    // Kirim subscription ke server Anda
+    await sendSubscriptionToServer(subscription);
+  } catch (error) {
+    console.error('Gagal berlangganan push notification:', error);
+    alert('Gagal berlangganan: ' + error.message);
+  } finally {
+    // Selalu perbarui status tombol setelah mencoba
+    setNotificationButtonState();
   }
 }
 
@@ -55,6 +77,12 @@ async function sendSubscriptionToServer(subscription) {
   const token = localStorage.getItem('access_token');
   if (!token) return;
 
+  const subscriptionData = subscription.toJSON();
+  const payload = {
+    endpoint: subscriptionData.endpoint,
+    keys: subscriptionData.keys,
+  };
+
   try {
     const response = await fetch('https://story-api.dicoding.dev/v1/notifications/subscribe', {
       method: 'POST',
@@ -62,7 +90,7 @@ async function sendSubscriptionToServer(subscription) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify(subscription),
+      body: JSON.stringify(payload),
     });
 
     const responseData = await response.json();
@@ -78,9 +106,64 @@ async function sendSubscriptionToServer(subscription) {
   }
 }
 
-// (Advanced) Fungsi untuk unsubscribe
+// FUNGSI BARU: Untuk unsubscribe
 export async function unsubscribeNotification() {
-  // 1. Dapatkan subscription
-  // 2. Panggil subscription.unsubscribe()
-  // 3. Kirim permintaan DELETE ke /notifications/subscribe di API Anda
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      alert('Anda sudah berhenti berlangganan.');
+      return;
+    }
+
+    // 1. Hapus dari server API
+    await sendUnsubscribeToServer(subscription);
+    
+    // 2. Hapus dari browser
+    const unsubscribed = await subscription.unsubscribe();
+    if (unsubscribed) {
+      console.log('Berhasil berhenti berlangganan.');
+      alert('Berhasil mematikan notifikasi!');
+    }
+  } catch (error) {
+    console.error('Gagal berhenti berlangganan:', error);
+    alert('Gagal mematikan notifikasi: ' + error.message);
+  } finally {
+    // Selalu perbarui status tombol setelah mencoba
+    setNotificationButtonState();
+  }
+}
+
+// FUNGSI BARU: Untuk mengirim data unsubscribe ke API server
+async function sendUnsubscribeToServer(subscription) {
+  const token = localStorage.getItem('access_token');
+  if (!token) return;
+
+  const subscriptionData = subscription.toJSON();
+  const payload = {
+    endpoint: subscriptionData.endpoint,
+    keys: subscriptionData.keys,
+  };
+
+  try {
+    const response = await fetch('https://story-api.dicoding.dev/v1/notifications/subscribe', {
+      method: 'DELETE', // Gunakan method DELETE
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseData = await response.json();
+    if (!response.ok) {
+      throw new Error(responseData.message || 'Gagal mengirim unsubscribe ke server');
+    }
+    console.log('Unsubscribe berhasil dikirim ke server.');
+  } catch (error) {
+    console.error(error);
+    // Kita tidak perlu melempar error di sini, 
+    // agar proses unsubscribe di browser tetap berjalan
+  }
 }

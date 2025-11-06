@@ -2,7 +2,8 @@ import "../styles/styles.css";
 import "leaflet/dist/leaflet.css";
 import App from "./pages/app";
 import { getAccessToken } from "./utils/auth";
-import { logout } from './utils/auth'; // <-- Import fungsi logout baru
+import { logout } from './utils/auth';
+import { requestNotificationPermission, unsubscribeNotification } from './utils/notification';
 
 const token = getAccessToken();
 const url = location.hash;
@@ -37,6 +38,27 @@ if (logoutButton) {
     location.hash = "#/login";
   });
 }
+
+// --- 2. TAMBAHKAN BLOK KODE INI ---
+// Notification button wiring
+const notificationButton = document.getElementById("notification-toggle");
+if (notificationButton) {
+  notificationButton.addEventListener("click", async (e) => {
+    e.preventDefault();
+    
+    // Cek status dari data attribute
+    const isSubscribed = notificationButton.dataset.subscribed === 'true';
+
+    if (isSubscribed) {
+      // Jika sudah subscribe -> panggil unsubscribe
+      await unsubscribeNotification();
+    } else {
+      // Jika belum subscribe -> panggil subscribe
+      await requestNotificationPermission();
+    }
+  });
+}
+// --- AKHIR BLOK KODE BARU ---
 
 window.addEventListener("hashchange", () => {
   app.renderPage();

@@ -7,11 +7,14 @@ export default class HomePage {
   #presenter = null;
   #map = null;
   #markers = [];
+  #currentPage = 1;
+  #storiesPerLoad = 15;
+  #isLoading = false;
 
   async render() {
     const token = localStorage.getItem("access_token");
 
-  const skipLink = `<a href="#main-content" class="skip-to-content" id="skip-to-content-link">Skip to main content</a>`;
+    const skipLink = `<a href="#main-content" class="skip-to-content" id="skip-to-content-link">Skip to main content</a>`;
 
     if (!token) {
       return `
@@ -32,6 +35,8 @@ export default class HomePage {
         </div>
         <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
         <div id="stories-list">Loading stories...</div>
+        
+        <div id="load-more-container" style="margin-top: 20px;"></div>
       </section>
     `;
   }
@@ -62,7 +67,8 @@ export default class HomePage {
       });
 
       await this.initialMap();
-      await this.#presenter.showStories();
+      await this.#presenter.showInitialStories(this.#storiesPerLoad);
+      this.#setupLoadMoreButton();
       this.#addFadeInEffect();
     } catch (error) {
       this.showError(error.message);
@@ -90,27 +96,23 @@ export default class HomePage {
     const container = document.getElementById("stories-list");
     const currentUserId = String(localStorage.getItem("user_id"));
 
+    // Hapus marker lama
+    this.#markers.forEach((marker) => marker.remove());
+    this.#markers = [];
+
     if (!stories || stories.length === 0) {
       container.innerHTML = "<p>Tidak ada story tersedia.</p>";
       return;
     }
 
-    this.#markers.forEach((marker) => marker.remove());
-    this.#markers = [];
-
+    // Render HTML baru (menggantikan)
     container.innerHTML = stories
       .map((story, index) => {
+        // ... (logika HTML map Anda tetap sama) ...
         const storyUserId = String(
           story.userId || (story.user && story.user.id)
         );
         const isCurrentUser = storyUserId === currentUserId;
-
-        console.log(
-          "StoryUserId:",
-          storyUserId,
-          "CurrentUserId:",
-          currentUserId
-        );
 
         return `
           <div 
@@ -118,7 +120,7 @@ export default class HomePage {
             ${index === 0 ? 'id="first-story" tabindex="0"' : ""}
             data-story-id="${story.id}"
           >
-            <img src="${story.photoUrl}" alt="Foto cerita" class="story-image">
+            <img src="${story.photoUrl || '/favicon.png'}" alt="Foto cerita" class="story-image">
             <h3>${story.name || "Nama tidak tersedia"}</h3>
             <p>${story.description || "Deskripsi tidak tersedia"}</p>
             <p><strong>Dibuat pada:</strong> ${new Date(
@@ -136,7 +138,9 @@ export default class HomePage {
       })
       .join("");
 
+    // Tambahkan marker baru
     stories.forEach((story) => {
+      // ... (logika marker Anda tetap sama) ...
       const latitude = story.lat || (story.location && story.location.latitude);
       const longitude =
         story.lon || (story.location && story.location.longitude);
@@ -159,83 +163,133 @@ export default class HomePage {
       const group = L.featureGroup(this.#markers);
       this.#map.fitBounds(group.getBounds());
     }
+
+    // 6. TAMPILKAN ATAU SEMBUNYIKAN TOMBOL BERDASARKAN HASIL
+    const loadMoreContainer = document.getElementById("load-more-container");
+    if (stories.length < this.#storiesPerLoad) {
+      loadMoreContainer.innerHTML = ""; // Sembunyikan jika cerita < 15
+    } else {
+      loadMoreContainer.innerHTML = `<button id="load-more-btn" class="btn">Muat ${this.#storiesPerLoad} Cerita Lainnya</button>`;
+    }
+  }
+
+  // 7. TAMBAHKAN FUNGSI BARU "appendStories" (UNTUK LOAD MORE)
+  appendStories(newStories) {
+    const container = document.getElementById("stories-list");
+    const currentUserId = String(localStorage.getItem("user_id"));
+
+    if (!newStories || newStories.length === 0) {
+      // Jika tidak ada cerita baru, sembunyikan tombol
+      document.getElementById("load-more-container").innerHTML = "";
+      return;
+    }
+
+    // Render HTML baru (menambahkan)
+    container.insertAdjacentHTML(
+      "beforeend",
+      newStories
+        .map((story) => {
+          const storyUserId = String(
+            story.userId || (story.user && story.user.id)
+          );
+          const isCurrentUser = storyUserId === currentUserId;
+
+          return `
+          <div 
+            class="story-item ${isCurrentUser ? "my-story" : "other-story"}"
+            data-story-id="${story.id}"
+          >
+            <img src="${story.photoUrl || '/favicon.png'}" alt="Foto cerita" class="story-image">
+            <h3>${story.name || "Nama tidak tersedia"}</h3>
+            <p>${story.description || "Deskripsi tidak tersedia"}</p>
+            <p><strong>Dibuat pada:</strong> ${new Date(
+              story.createdAt
+            ).toLocaleString("id-ID", {
+              dateStyle: "full",
+              timeStyle: "short",
+            })}</p>
+            ${
+              story.lat && story.lon
+                ? `<p><strong>Lokasi:</strong> ${story.lat}, ${story.lon}</p>`
+                : ""
+            }
+          </div>`;
+        })
+        .join("")
+    );
+
+    // Tambahkan marker HANYA untuk cerita baru
+    newStories.forEach((story) => {
+      const latitude = story.lat || (story.location && story.location.latitude);
+      const longitude =
+        story.lon || (story.location && story.location.longitude);
+      const storyUserId = String(story.userId || (story.user && story.user.id));
+      const isCurrentUser = storyUserId === currentUserId;
+
+      if (latitude && longitude) {
+        this.#addMarker({
+          coordinate: [parseFloat(latitude), parseFloat(longitude)],
+          title: story.name || "Tidak ada judul",
+          description: story.description || "Tidak ada deskripsi",
+          photoUrl: story.photoUrl,
+          isCurrentUser,
+          id: story.id,
+        });
+      }
+    });
+
+    // Cek apakah ini halaman terakhir
+    if (newStories.length < this.#storiesPerLoad) {
+      document.getElementById("load-more-container").innerHTML = ""; // Sembunyikan tombol
+    }
+  }
+
+  // 8. TAMBAHKAN FUNGSI UNTUK SETUP TOMBOL
+  #setupLoadMoreButton() {
+    const container = document.getElementById("load-more-container");
+
+    container.addEventListener("click", async (event) => {
+      if (event.target.id !== "load-more-btn" || this.#isLoading) return;
+
+      this.#isLoading = true;
+      this.#showLoadMoreLoading(true);
+
+      this.#currentPage++;
+      await this.#presenter.fetchMoreStories(
+        this.#currentPage,
+        this.#storiesPerLoad
+      );
+
+      this.#isLoading = false;
+      this.#showLoadMoreLoading(false);
+    });
+  }
+
+  // 9. TAMBAHKAN FUNGSI UNTUK UI LOADING TOMBOL
+  #showLoadMoreLoading(isLoading) {
+    const button = document.getElementById("load-more-btn");
+    if (!button) return;
+
+    if (isLoading) {
+      button.textContent = "Memuat...";
+      button.disabled = true;
+    } else {
+      button.textContent = `Muat ${this.#storiesPerLoad} Cerita Lainnya`;
+      button.disabled = false;
+    }
   }
 
   #addMarker({
-    coordinate,
-    title,
-    description,
-    photoUrl = null,
-    isCurrentUser = false,
-    id = null,
+    // ... (fungsi #addMarker Anda tetap sama) ...
   }) {
-    const icon = L.icon({
-      iconUrl: isCurrentUser
-        ? "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png"
-        : "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowUrl:
-        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
-      shadowSize: [41, 41],
-      shadowAnchor: [12, 41],
-    });
-
-    const popupContent = `
-      <div class="marker-popup" style="max-width: 200px;">
-        <h4 class="marker-title" style="margin: 0 0 8px 0; color: ${
-          isCurrentUser ? "#2563eb" : "#dc2626"
-        }">${title}</h4>
-        ${
-          photoUrl
-            ? `<img src="${photoUrl}" alt="Foto cerita" style="width: 100%; border-radius: 4px; margin: 8px 0;" />`
-            : ""
-        }
-        <p style="margin: 8px 0;">${description}</p>
-        <p style="margin: 4px 0; font-size: 0.875rem; color: ${
-          isCurrentUser ? "#2563eb" : "#dc2626"
-        }">
-          <strong>${isCurrentUser ? "Story Saya" : "Story User"}</strong>
-        </p>
-      </div>
-    `;
-
-    const marker = L.marker(coordinate, { icon })
-      .bindPopup(popupContent)
-      .addTo(this.#map);
-
-    if (id) {
-      marker.storyId = id;
-    }
-
-    this.#markers.push(marker);
-
-    console.log(
-      `Marker added: ${
-        isCurrentUser ? "Current User" : "Other User"
-      } at ${coordinate}`
-    );
-
-    return marker;
+    // ...
   }
 
   showError(message) {
-    const container = document.getElementById("stories-list");
-    container.innerHTML = `<p class="error-message">Error: ${message}</p>`;
-
-    if (message.includes("401") || message.includes("unauthorized")) {
-      localStorage.removeItem("access_token");
-      setTimeout(() => {
-        window.location.hash = "/login";
-      }, 2000);
-    }
+    // ... (fungsi showError Anda tetap sama) ...
   }
 
   #addFadeInEffect() {
-    const container = document.querySelector(".container");
-    if (container) {
-      container.classList.add("fade-in");
-    }
+    // ... (fungsi #addFadeInEffect Anda tetap sama) ...
   }
 }

@@ -27,19 +27,26 @@ export default class AddStory {
       <section class="container fade-in" id="main-content" tabindex="-1">
         <h1>Tambah Cerita Baru</h1>
         <form id="add-story-form" enctype="multipart/form-data">
-          <div class="form-control">
-            <label for="description">Deskripsi</label>
-            <textarea id="description" name="description" placeholder="Tulis cerita Anda..." required></textarea>
-          </div>
-
+          
           <div class="form-control">
             <label>Ambil Gambar dari Kamera:</label><br>
-            <video id="camera-stream" autoplay playsinline width="100%" aria-label="Stream kamera untuk mengambil foto"></video>
-            <button type="button" id="capture-btn" class="btn">Ambil Foto</button>
+            
+            <button type="button" id="toggle-camera-btn" class="btn btn-outline" style="margin-bottom: 10px;">
+              Nyalakan Kamera
+            </button>
+
+            <video id="camera-stream" autoplay playsinline width="100%" aria-label="Stream kamera untuk mengambil foto" style="display:none;"></video>
+            
+            <button type="button" id="capture-btn" class="btn" style="display:none;">Ambil Foto</button>
             <canvas id="photo-canvas" style="display:none;" aria-label="Canvas untuk menampilkan foto hasil tangkapan kamera"></canvas>
 
             <label for="photo">Atau pilih foto dari perangkat:</label>
             <input type="file" id="photo" name="photo" accept="image/jpeg,image/png" required />
+          </div>
+
+          <div class="form-control">
+            <label for="description">Deskripsi Cerita:</label>
+            <textarea id="description" name="description" required></textarea>
           </div>
 
           <div class="form-control">
@@ -87,13 +94,19 @@ export default class AddStory {
       });
     }
 
-    this.#setupCamera();
     this.#setupMap();
     this.#addFadeInEffect();
 
+    document.getElementById("toggle-camera-btn").addEventListener("click", () => {
+      this.#toggleCamera();
+    });
+    document.getElementById("capture-btn").addEventListener("click", () => {
+      this.#capturePhoto();
+    });
+
     this.#form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      
+
       const description = this.#form.description.value.trim();
       const imageFile = this.#form.photo.files[0];
       const useLocation = this.#form.useLocation.checked;
@@ -172,42 +185,7 @@ export default class AddStory {
     }
   }
 
-  #setupCamera() {
-    const video = document.getElementById("camera-stream");
-    navigator.mediaDevices
-      .getUserMedia({ video: true })
-      .then((stream) => {
-        this.#stream = stream;
-        video.srcObject = stream;
-      })
-      .catch(() => {
-        alert("Kamera tidak tersedia. Izinkan akses kamera di browser.");
-      });
 
-    document.getElementById("capture-btn").addEventListener("click", () => {
-      const canvas = document.getElementById("photo-canvas");
-      canvas.style.display = "block";
-      const ctx = canvas.getContext("2d");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-
-      canvas.toBlob(
-        (blob) => {
-          if (blob.size > 1_000_000) {
-            alert("Ukuran foto melebihi 1MB.");
-            return;
-          }
-          const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          document.getElementById("photo").files = dt.files;
-        },
-        "image/jpeg",
-        0.8
-      );
-    });
-  }
 
   #setupMap() {
     this.#map = L.map("map").setView([-6.2, 106.8], 13);
@@ -272,6 +250,69 @@ export default class AddStory {
     if ('serviceWorker' in navigator && 'SyncManager' in window) {
       const registration = await navigator.serviceWorker.ready;
       await registration.sync.register('send-story');
+    }
+  }
+
+  async #startCamera() {
+    const video = document.getElementById("camera-stream");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      this.#stream = stream;
+      video.srcObject = stream;
+    } catch (err) {
+      alert("Kamera tidak tersedia. Izinkan akses kamera di browser.");
+      throw err;
+    }
+  }
+
+  #capturePhoto() {
+    const video = document.getElementById("camera-stream");
+    const canvas = document.getElementById("photo-canvas");
+    canvas.style.display = "block";
+    const ctx = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    canvas.toBlob(
+      (blob) => {
+        if (blob.size > 1_000_000) {
+          alert("Ukuran foto melebihi 1MB.");
+          return;
+        }
+        const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById("photo").files = dt.files;
+      },
+      "image/jpeg",
+      0.8
+    );
+  }
+
+  async #toggleCamera() {
+    const video = document.getElementById("camera-stream");
+    const toggleBtn = document.getElementById("toggle-camera-btn");
+    const captureBtn = document.getElementById("capture-btn");
+
+    if (this.#stream) {
+      // Jika kamera NYALA -> Matikan
+      this.#stopCamera();
+      video.style.display = "none";
+      captureBtn.style.display = "none";
+      toggleBtn.textContent = "Nyalakan Kamera";
+      toggleBtn.classList.add("btn-outline");
+    } else {
+      // Jika kamera MATI -> Nyalakan
+      try {
+        await this.#startCamera();
+        video.style.display = "block";
+        captureBtn.style.display = "block";
+        toggleBtn.textContent = "Matikan Kamera";
+        toggleBtn.classList.remove("btn-outline");
+      } catch (error) {
+        console.error("Gagal menyalakan kamera.", error);
+      }
     }
   }
 

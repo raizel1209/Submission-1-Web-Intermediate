@@ -1,6 +1,7 @@
 import routes from "../routes/routes";
 import { getActiveRoute } from "../routes/url-parser";
 import { getAccessToken } from "../utils/auth";
+import { setNotificationButtonState } from "../utils/notification";
 
 class App {
   #content = null;
@@ -103,7 +104,7 @@ class App {
 
     const loginLink = document.getElementById("login-link");
     const logoutButton = document.getElementById("logout-button");
-    const notifButton = document.getElementById("notification-toggle"); // Ambil tombol notif
+    const notifButton = document.getElementById("notification-toggle");
 
     if (loginLink) {
       loginLink.style.display = isLogin ? "none" : "inline";
@@ -113,10 +114,15 @@ class App {
       logoutButton.style.display = isLogin ? "inline" : "none";
       logoutButton.setAttribute("aria-hidden", String(!isLogin));
     }
-    // Tampilkan tombol notifikasi hanya jika login
+    
     if (notifButton) {
       notifButton.style.display = isLogin ? "inline" : "none";
       notifButton.setAttribute("aria-hidden", String(!isLogin));
+      
+      // 2. PANGGIL FUNGSI INI SAAT LOGIN
+      if (isLogin) {
+        setNotificationButtonState();
+      }
     }
 
     // Render halaman
