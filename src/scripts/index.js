@@ -1,8 +1,8 @@
 import "../styles/styles.css";
 import "leaflet/dist/leaflet.css";
-
 import App from "./pages/app";
 import { getAccessToken } from "./utils/auth";
+import { logout } from './utils/auth'; // <-- Import fungsi logout baru
 
 const token = getAccessToken();
 const url = location.hash;
@@ -20,10 +20,11 @@ const app = new App({
 // Logout button wiring: remove token and redirect to login
 const logoutButton = document.getElementById("logout-button");
 if (logoutButton) {
-  logoutButton.addEventListener("click", (e) => {
+  logoutButton.addEventListener("click", async (e) => { // <-- jadikan async
     e.preventDefault();
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user_id");
+    
+    await logout(); // <-- panggil fungsi logout()
+    
     // update UI
     const loginLink = document.getElementById("login-link");
     const navbar = document.getElementById("navbar");
@@ -41,6 +42,19 @@ window.addEventListener("hashchange", () => {
   app.renderPage();
 });
 
-window.addEventListener("load", () => {
+window.addEventListener('load', () => {
   app.renderPage();
+  registerServiceWorker(); // <-- Panggil fungsi registrasi
 });
+
+// Fungsi untuk registrasi SW
+const registerServiceWorker = async () => {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      console.log('Service Worker registered:', registration);
+    } catch (error) {
+      console.error('Service Worker registration failed:', error);
+    }
+  }
+};

@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="id">
   <head>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#8b00cc" />
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="shortcut icon" href="favicon.png" />
-    <title>App</title>
+    <title>Story App</title>
   </head>
   <body>
     <header id="main-header">
@@ -14,6 +16,11 @@
           <ul id="nav-list" class="nav-list">
             <li><a href="#/">Beranda</a></li>
             <li><a href="#/add-story">Tambah Cerita</a></li>
+            <li>
+              <button id="notification-toggle" class="btn btn-outline" style="display: none;" aria-label="Aktifkan notifikasi">
+                Aktifkan Notifikasi
+              </button>
+            </li>
             <li><a href="#/login" id="login-link" aria-hidden="false">Login</a></li>
             <li>
               <a href="#" id="logout-button" style="display: none" aria-hidden="true">Logout</a>

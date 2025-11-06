@@ -6,6 +6,7 @@ export default class LoginPage {
   #presenter = null;
 
   async render() {
+    // ... (kode render Anda tetap sama)
     return `
       <a href="#main-content" class="skip-to-content" id="skip-to-content-link">Skip to main content</a>
       <section class="login-container fade-in" id="main-content" tabindex="-1">
@@ -42,19 +43,8 @@ export default class LoginPage {
       model: ApiService,
       authModel: AuthModel,
     });
-
-    // Skip to Content handler
-    const skipLink = document.getElementById("skip-to-content-link");
-    const mainContent = document.getElementById("main-content");
-    if (skipLink && mainContent) {
-      skipLink.addEventListener("click", function (e) {
-        e.preventDefault();
-        mainContent.setAttribute("tabindex", "-1");
-        mainContent.focus();
-      });
-    }
-
-    this.#setupForm();
+    // ... (kode skip link) ...
+    this.#setupForm(); // <-- Perbarui fungsi ini
     this.#addFadeInEffect();
   }
 
@@ -69,14 +59,22 @@ export default class LoginPage {
           password: document.getElementById("password-input").value,
         };
 
-        await this.#presenter.getLogin(data);
+        // 1. Panggil presenter dan TUNGGU hasilnya
+        const result = await this.#presenter.getLogin(data);
+
+        // 2. PERIKSA hasil, BARU panggil loginSuccessfully (yang akan navigasi)
+        if (result && result.success) {
+          this.loginSuccessfully(`Selamat datang, ${result.name}!`);
+        }
+        // Jika gagal, presenter sudah memanggil this.loginFailed()
       });
     }
   }
 
   loginSuccessfully(message) {
     console.log("Login sukses:", message);
-    // SPA: gunakan location.hash agar tidak reload penuh
+    
+    // 3. Navigasi aman dilakukan di sini
     if ("startViewTransition" in document) {
       document.startViewTransition(() => {
         location.hash = "/";
@@ -90,6 +88,7 @@ export default class LoginPage {
     alert(message || "Login gagal. Silakan coba lagi.");
   }
 
+  // ... (sisa kode: showSubmitLoadingButton, hideSubmitLoadingButton, #addFadeInEffect) ...
   showSubmitLoadingButton() {
     document.getElementById("submit-button-container").innerHTML = `
       <button class="btn" type="submit" disabled>

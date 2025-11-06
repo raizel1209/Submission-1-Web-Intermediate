@@ -1,5 +1,6 @@
 import { getActiveRoute } from "../routes/url-parser";
 import { ACCESS_TOKEN_KEY } from "../config";
+import { storyDb } from "./db"; // <-- 1. Import db helper
 
 export function getAccessToken() {
   try {
@@ -65,10 +66,14 @@ export function getLogout() {
   return removeAccessToken();
 }
 
-export function logout() {
+export async function logout() {
   const removed = removeAccessToken();
   try {
     localStorage.removeItem("user_id");
-  } catch (e) {}
+    // 2. Hapus token dari IndexedDB
+    await storyDb.delete('user-token');
+  } catch (e) {
+    console.error('Gagal menghapus token dari IndexedDB:', e);
+  }
   return removed;
 }

@@ -1,3 +1,5 @@
+import { storyDb } from '../../../utils/db'; // Pastikan path ini benar
+
 export default class LoginPresenter {
   #view;
   #model;
@@ -17,15 +19,27 @@ export default class LoginPresenter {
 
       if (response.error) {
         this.#view.loginFailed(response.message);
-        return;
+        return { success: false }; // <-- 1. Kembalikan status gagal
       }
 
       const { token, name } = response.loginResult;
+
+      // Simpan token di localStorage
       this.#authModel.putAccessToken(token);
-      this.#view.loginSuccessfully(`Selamat datang, ${name}!`);
+
+      // 2. TUNGGU operasi IndexedDB selesai
+      await storyDb.put({ id: 'user-token', token: token });
+
+      // 3. Hapus pemanggilan view.loginSuccessfully() dari sini
+      // this.#view.loginSuccessfully(`Selamat datang, ${name}!`); 
+      
+      // 4. Kembalikan status sukses dan data
+      return { success: true, name: name };
+
     } catch (error) {
       console.error("getLogin: error:", error);
       this.#view.loginFailed(error.message);
+      return { success: false }; // <-- 5. Kembalikan status gagal
     } finally {
       this.#view.hideSubmitLoadingButton();
     }

@@ -16,6 +16,7 @@ class App {
   }
 
   _setupDrawer() {
+    // ... (Kode _setupDrawer Anda tidak perlu diubah) ...
     if (!this.#drawerButton || !this.#navigationDrawer) return;
 
     const toggleDrawer = (open) => {
@@ -32,7 +33,6 @@ class App {
       toggleDrawer(!this.#navigationDrawer.classList.contains("open"));
     });
 
-    // allow keyboard activation (Enter/Space)
     this.#drawerButton.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -69,29 +69,42 @@ class App {
     const url = getActiveRoute();
     const isLogin = !!getAccessToken();
 
-    const allowedWithoutLogin = ["/login", "/register"];
-    const isAllowed = allowedWithoutLogin.includes(url);
+    // --- LOGIKA AUTENTIKASI BARU (PINDAH DARI routes.js) ---
+    const unauthenticatedRoutesOnly = ["/login", "/register"];
+    const isAuthenticatedRoute = !unauthenticatedRoutesOnly.includes(url);
 
-    if (!isLogin && !isAllowed) {
+    // Skenario 1: User belum login TAPI mencoba akses halaman privat (cth: "/")
+    if (isAuthenticatedRoute && !isLogin) {
       location.hash = "/login";
-      return;
+      return; // Stop rendering, redirect ke login
     }
+
+    // Skenario 2: User sudah login TAPI mencoba akses halaman login/register
+    if (!isAuthenticatedRoute && isLogin) {
+      location.hash = "/";
+      return; // Stop rendering, redirect ke beranda
+    }
+    // --- AKHIR LOGIKA AUTENTIKASI ---
 
     const page = routes[url];
 
     if (!page) {
-      location.hash = "/login";
+      // Jika rute tidak ditemukan (404), redirect ke halaman yang sesuai
+      console.log(`Rute tidak ditemukan untuk: ${url}`);
+      location.hash = isLogin ? "/" : "/login";
       return;
     }
 
+    // Mengelola tampilan UI berdasarkan status login
     const navbar = document.getElementById("navbar");
     if (navbar) {
       navbar.style.display = isLogin ? "block" : "none";
     }
 
-    // Toggle login/logout link visibility for accessibility
     const loginLink = document.getElementById("login-link");
     const logoutButton = document.getElementById("logout-button");
+    const notifButton = document.getElementById("notification-toggle"); // Ambil tombol notif
+
     if (loginLink) {
       loginLink.style.display = isLogin ? "none" : "inline";
       loginLink.setAttribute("aria-hidden", String(isLogin));
@@ -100,7 +113,13 @@ class App {
       logoutButton.style.display = isLogin ? "inline" : "none";
       logoutButton.setAttribute("aria-hidden", String(!isLogin));
     }
+    // Tampilkan tombol notifikasi hanya jika login
+    if (notifButton) {
+      notifButton.style.display = isLogin ? "inline" : "none";
+      notifButton.setAttribute("aria-hidden", String(!isLogin));
+    }
 
+    // Render halaman
     const renderContent = async () => {
       this.#content.innerHTML = await page.render();
       await page.afterRender();

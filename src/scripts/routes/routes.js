@@ -3,16 +3,13 @@ import AddStory from "../pages/story/add-story";
 import LoginPage from "../pages/auth/login/login-page";
 import RegisterPage from "../pages/auth/register/register-page";
 
-import {
-  checkAuthenticatedRoute,
-  checkUnauthenticatedRouteOnly,
-} from "../utils/auth";
+// Hapus import untuk checkAuthenticatedRoute dan checkUnauthenticatedRouteOnly
 
 const routes = {
-  "/": checkAuthenticatedRoute(new HomePage()),
-  "/add-story": checkAuthenticatedRoute(new AddStory()),
-  "/login": checkUnauthenticatedRouteOnly(new LoginPage()),
-  "/register": checkUnauthenticatedRouteOnly(new RegisterPage()),
+  "/": new HomePage(),
+  "/add-story": new AddStory(),
+  "/login": new LoginPage(),
+  "/register": new RegisterPage(),
 };
 
 export default routes;

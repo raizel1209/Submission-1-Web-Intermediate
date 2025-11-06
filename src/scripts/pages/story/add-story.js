@@ -2,6 +2,7 @@ import AddStoryPresenter from "./addStory-presenter";
 import * as ApiService from "../../data/api";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { syncDb } from '../../utils/db';
 
 export default class AddStory {
   #presenter = null;
@@ -92,7 +93,7 @@ export default class AddStory {
 
     this.#form.addEventListener("submit", async (event) => {
       event.preventDefault();
-
+      
       const description = this.#form.description.value.trim();
       const imageFile = this.#form.photo.files[0];
       const useLocation = this.#form.useLocation.checked;
@@ -118,6 +119,18 @@ export default class AddStory {
         } catch {
           alert("Gagal mendapatkan lokasi otomatis.");
         }
+      }
+
+      // Cek koneksi internet
+      if (!navigator.onLine) {
+        console.log("Offline. Menyimpan ke IndexedDB untuk sinkronisasi.");
+        await this.#saveForSync({ description, photo: imageFile, lat, lon });
+        alert("Anda sedang offline. Cerita akan dikirim saat kembali online.");
+
+        // Reset form dan kembali ke home
+        this.#form.reset();
+        location.hash = "/";
+        return;
       }
 
       const formData = new FormData();
@@ -249,6 +262,17 @@ export default class AddStory {
   #addFadeInEffect() {
     const container = document.querySelector(".container");
     container.classList.add("fade-in");
+  }
+
+  async #saveForSync(story) {
+    // Simpan data ke syncDb
+    await syncDb.put(story);
+
+    // Daftarkan event 'sync' ke Service Worker
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register('send-story');
+    }
   }
 
   showSubmitSuccess(message) {
