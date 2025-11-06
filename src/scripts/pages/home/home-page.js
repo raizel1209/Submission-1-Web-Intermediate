@@ -27,6 +27,9 @@ export default class HomePage {
       ${skipLink}
       <section class="container fade-in" id="main-content" tabindex="-1">
         <h1>Home Page</h1>
+        <div style="margin-bottom: 20px;">
+          <a href="#/add-story" class="btn">Tambah Cerita Baru</a>
+        </div>
         <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
         <div id="stories-list">Loading stories...</div>
       </section>
