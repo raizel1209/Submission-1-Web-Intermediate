@@ -1,5 +1,0 @@
-- [x] Add description textarea to the form in render()
-- [ ] Move private methods (#startCamera, #capturePhoto, #toggleCamera, #stopCamera, #handleVisibilityChange, #addFadeInEffect, #saveForSync) to class level
-- [ ] Remove duplicate methods (#setupCamera, second #stopCamera)
-- [ ] Fix event listeners in afterRender()
-- [ ] Ensure form submission accesses description correctly
