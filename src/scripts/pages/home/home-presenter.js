@@ -1,6 +1,5 @@
-// src/scripts/pages/home/home-presenter.js
+import { storyDb, syncDb } from '../../utils/db'; // <-- 1. IMPORT syncDb
 
-import { storyDb } from '../../utils/db';
 export default class HomePresenter {
   #view = null;
   #model = null;
@@ -10,36 +9,41 @@ export default class HomePresenter {
     this.#model = model;
   }
 
-  // UBAH FUNGSI INI:
+  // Ganti nama fungsi ini dari showStories menjadi showInitialStories
   async showInitialStories(size) {
     try {
-      // 1. (Read) Coba ambil dari cache dulu
+      // 2. Ambil data pending DARI syncDb
+      const pendingStories = await syncDb.getAll();
+
+      // 3. Ambil data cache DARI storyDb
       const cachedStories = await storyDb.getAll();
-      if (cachedStories.length > 0) {
-        this.#view.showStories(cachedStories);
+      if (cachedStories.length > 0 || pendingStories.length > 0) {
+        // 4. Kirim KEDUA data ke view untuk tampilan instan
+        this.#view.showStories(cachedStories, pendingStories);
       }
 
-      // 2. Tetap fetch dari network (hanya halaman 1)
       const token = localStorage.getItem("access_token");
       if (!token) {
         throw new Error("Token tidak ditemukan. Silakan login ulang.");
       }
 
+      // 5. Perbaiki API call: Tambahkan 'location: 1'
       const response = await this.#model.getAllStories({
         token,
-        page: 1, // Selalu ambil halaman 1
-        size: size, // Gunakan ukuran yang diminta
+        page: 1,
+        size: size,
+        location: 1, // <-- TAMBAHKAN INI UNTUK MENDAPATKAN DATA PETA
       });
 
       if (response.error) throw new Error(response.message);
 
       if (response.listStory) {
-        // 3. (Write) Simpan data baru ke IndexedDB
         await storyDb.putAll(response.listStory);
-        // 4. Tampilkan data baru (menggantikan cache)
-        this.#view.showStories(response.listStory);
+        // 6. Kirim data network + data pending ke view
+        this.#view.showStories(response.listStory, pendingStories);
       } else {
-        if (cachedStories.length === 0) {
+        // 7. Cek semua sumber sebelum tampil error
+        if (cachedStories.length === 0 && pendingStories.length === 0) {
           this.#view.showError("Tidak ada data story yang ditemukan");
         }
       }
@@ -56,7 +60,7 @@ export default class HomePresenter {
     }
   }
 
-  // TAMBAHKAN FUNGSI BARU INI:
+  // Fungsi ini mengambil data untuk "load more"
   async fetchMoreStories(page, size) {
     try {
       const token = localStorage.getItem("access_token");
@@ -64,16 +68,17 @@ export default class HomePresenter {
         throw new Error("Token tidak ditemukan. Silakan login ulang.");
       }
 
+      // 8. Perbaiki API call: Tambahkan 'location: 1'
       const response = await this.#model.getAllStories({
         token,
         page: page,
         size: size,
+        location: 1, // <-- TAMBAHKAN INI JUGA
       });
 
       if (response.error) throw new Error(response.message);
 
       if (response.listStory) {
-        // Panggil fungsi "append" baru di view
         this.#view.appendStories(response.listStory);
       }
     } catch (error) {

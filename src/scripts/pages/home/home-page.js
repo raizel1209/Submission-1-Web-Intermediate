@@ -10,6 +10,7 @@ export default class HomePage {
   #currentPage = 1;
   #storiesPerLoad = 15;
   #isLoading = false;
+  #blobUrls = []; // <-- Properti untuk melacak blob URL
 
   async render() {
     const token = localStorage.getItem("access_token");
@@ -44,7 +45,6 @@ export default class HomePage {
   async afterRender() {
     const token = localStorage.getItem("access_token");
 
-    // Skip to Content handler
     const skipLink = document.getElementById("skip-to-content-link");
     const mainContent = document.getElementById("main-content");
     if (skipLink && mainContent) {
@@ -67,7 +67,9 @@ export default class HomePage {
       });
 
       await this.initialMap();
+      // Panggil fungsi presenter yang sudah diubah
       await this.#presenter.showInitialStories(this.#storiesPerLoad);
+      
       this.#setupLoadMoreButton();
       this.#addFadeInEffect();
     } catch (error) {
@@ -92,60 +94,102 @@ export default class HomePage {
     });
   }
 
-  showStories(stories) {
-    const container = document.getElementById("stories-list");
+  // --- Buat Fungsi Helper Baru Untuk Render Item ---
+  #renderStoryItemHTML(story, isPending = false, index = -1) {
+    let imageUrl, name, description, createdAt, locationHtml, storyClass, pendingBadge, tabIndex;
+
     const currentUserId = String(localStorage.getItem("user_id"));
 
-    // Hapus marker lama
+    if (isPending) {
+      // --- Logika untuk PENDING STORY ---
+      // Buat URL sementara untuk gambar dari File object
+      imageUrl = URL.createObjectURL(story.photo);
+      this.#blobUrls.push(imageUrl); // Simpan untuk dibersihkan nanti
+
+      name = "Cerita Tertunda";
+      description = story.description;
+      createdAt = new Date().toLocaleString("id-ID", {
+        dateStyle: "medium", timeStyle: "short"
+      });
+      locationHtml = (story.lat && story.lon) ? `<p><strong>Lokasi:</strong> ${story.lat}, ${story.lon}</p>` : "";
+      storyClass = "story-item pending-story";
+      pendingBadge = `<span class="pending-badge">Menunggu Sinkronisasi</span>`;
+      // Beri ID 'first-story' jika ini item pertama
+      tabIndex = index === 0 ? 'id="first-story" tabindex="0"' : '';
+    } else {
+      // --- Logika untuk SYNCED STORY ---
+      const storyUserId = String(story.userId || (story.user && story.user.id));
+      const isCurrentUser = storyUserId === currentUserId;
+
+      imageUrl = story.photoUrl || '/favicon.png';
+      name = story.name || "Nama tidak tersedia";
+      description = story.description || "Deskripsi tidak tersedia";
+      createdAt = new Date(story.createdAt).toLocaleString("id-ID", {
+        dateStyle: "full", timeStyle: "short"
+      });
+      locationHtml = (story.lat && story.lon) ? `<p><strong>Lokasi:</strong> ${story.lat}, ${story.lon}</p>` : "";
+      storyClass = `story-item ${isCurrentUser ? "my-story" : "other-story"}`;
+      pendingBadge = "";
+      // Beri ID 'first-story' hanya jika index 0 (dan tidak ada pending)
+      tabIndex = index === 0 ? 'id="first-story" tabindex="0"' : '';
+    }
+
+    return `
+      <div 
+        class="${storyClass}"
+        ${tabIndex}
+        data-story-id="${story.id || 'pending-' + index}"
+      >
+        ${pendingBadge}
+        <img src="${imageUrl}" alt="Foto cerita" class="story-image">
+        <h3>${name}</h3>
+        <p>${description}</p>
+        <p><strong>Dibuat pada:</strong> ${createdAt}</p>
+        ${locationHtml}
+      </div>`;
+  }
+
+  // --- Ubah Fungsi showStories ---
+  showStories(stories, pendingStories = []) {
+    const container = document.getElementById("stories-list");
+
+    // Bersihkan blob URL lama (jika ada) untuk mencegah memory leak
+    if (this.#blobUrls.length > 0) {
+      this.#blobUrls.forEach(url => URL.revokeObjectURL(url));
+      this.#blobUrls = [];
+    }
+    
+    // Bersihkan marker lama
     this.#markers.forEach((marker) => marker.remove());
     this.#markers = [];
 
-    if (!stories || stories.length === 0) {
+    if ((!stories || stories.length === 0) && (!pendingStories || pendingStories.length === 0)) {
       container.innerHTML = "<p>Tidak ada story tersedia.</p>";
       return;
     }
 
-    // Render HTML baru (menggantikan)
-    container.innerHTML = stories
-      .map((story, index) => {
-        // ... (logika HTML map Anda tetap sama) ...
-        const storyUserId = String(
-          story.userId || (story.user && story.user.id)
-        );
-        const isCurrentUser = storyUserId === currentUserId;
+    // Render HTML: Pending dulu, baru synced
+    const pendingHtml = pendingStories.map((story, index) => {
+      return this.#renderStoryItemHTML(story, true, index);
+    }).join("");
+    
+    const syncedHtml = stories.map((story, index) => {
+      // Beri 'first-story' ke item synced pertama HANYA JIKA tidak ada pending story
+      const storyIndex = pendingStories.length === 0 ? index : -1;
+      return this.#renderStoryItemHTML(story, false, storyIndex);
+    }).join("");
 
-        return `
-          <div 
-            class="story-item ${isCurrentUser ? "my-story" : "other-story"}"
-            ${index === 0 ? 'id="first-story" tabindex="0"' : ""}
-            data-story-id="${story.id}"
-          >
-            <img src="${story.photoUrl || '/favicon.png'}" alt="Foto cerita" class="story-image">
-            <h3>${story.name || "Nama tidak tersedia"}</h3>
-            <p>${story.description || "Deskripsi tidak tersedia"}</p>
-            <p><strong>Dibuat pada:</strong> ${new Date(
-              story.createdAt
-            ).toLocaleString("id-ID", {
-              dateStyle: "full",
-              timeStyle: "short",
-            })}</p>
-            ${
-              story.lat && story.lon
-                ? `<p><strong>Lokasi:</strong> ${story.lat}, ${story.lon}</p>`
-                : ""
-            }
-          </div>`;
-      })
-      .join("");
+    container.innerHTML = pendingHtml + syncedHtml;
 
-    // Tambahkan marker baru
+    // --- Logika Marker ---
+    
+    // Tambahkan marker untuk cerita yang sudah sync
     stories.forEach((story) => {
-      // ... (logika marker Anda tetap sama) ...
       const latitude = story.lat || (story.location && story.location.latitude);
       const longitude =
         story.lon || (story.location && story.location.longitude);
       const storyUserId = String(story.userId || (story.user && story.user.id));
-      const isCurrentUser = storyUserId === currentUserId;
+      const isCurrentUser = String(localStorage.getItem("user_id")) === storyUserId;
 
       if (latitude && longitude) {
         this.#addMarker({
@@ -154,6 +198,20 @@ export default class HomePage {
           description: story.description || "Tidak ada deskripsi",
           photoUrl: story.photoUrl,
           isCurrentUser,
+          id: story.id,
+        });
+      }
+    });
+
+    // Tambahkan marker untuk cerita pending
+    pendingStories.forEach((story) => {
+      if (story.lat && story.lon) {
+        this.#addMarker({
+          coordinate: [parseFloat(story.lat), parseFloat(story.lon)],
+          title: "Cerita Tertunda",
+          description: story.description,
+          photoUrl: null, // Tidak ada URL foto, hanya blob lokal
+          isCurrentUser: true, // Asumsikan cerita pending adalah milik user
           id: story.id,
         });
       }
@@ -164,57 +222,30 @@ export default class HomePage {
       this.#map.fitBounds(group.getBounds());
     }
 
-    // 6. TAMPILKAN ATAU SEMBUNYIKAN TOMBOL BERDASARKAN HASIL
+    // --- Logika Tombol "Load More" ---
     const loadMoreContainer = document.getElementById("load-more-container");
     if (stories.length < this.#storiesPerLoad) {
-      loadMoreContainer.innerHTML = ""; // Sembunyikan jika cerita < 15
+      loadMoreContainer.innerHTML = ""; 
     } else {
       loadMoreContainer.innerHTML = `<button id="load-more-btn" class="btn">Muat ${this.#storiesPerLoad} Cerita Lainnya</button>`;
     }
   }
 
-  // 7. TAMBAHKAN FUNGSI BARU "appendStories" (UNTUK LOAD MORE)
+  // --- Ubah Fungsi appendStories ---
   appendStories(newStories) {
     const container = document.getElementById("stories-list");
     const currentUserId = String(localStorage.getItem("user_id"));
 
     if (!newStories || newStories.length === 0) {
-      // Jika tidak ada cerita baru, sembunyikan tombol
       document.getElementById("load-more-container").innerHTML = "";
       return;
     }
 
-    // Render HTML baru (menambahkan)
+    // Gunakan helper baru untuk render
     container.insertAdjacentHTML(
       "beforeend",
       newStories
-        .map((story) => {
-          const storyUserId = String(
-            story.userId || (story.user && story.user.id)
-          );
-          const isCurrentUser = storyUserId === currentUserId;
-
-          return `
-          <div 
-            class="story-item ${isCurrentUser ? "my-story" : "other-story"}"
-            data-story-id="${story.id}"
-          >
-            <img src="${story.photoUrl || '/favicon.png'}" alt="Foto cerita" class="story-image">
-            <h3>${story.name || "Nama tidak tersedia"}</h3>
-            <p>${story.description || "Deskripsi tidak tersedia"}</p>
-            <p><strong>Dibuat pada:</strong> ${new Date(
-              story.createdAt
-            ).toLocaleString("id-ID", {
-              dateStyle: "full",
-              timeStyle: "short",
-            })}</p>
-            ${
-              story.lat && story.lon
-                ? `<p><strong>Lokasi:</strong> ${story.lat}, ${story.lon}</p>`
-                : ""
-            }
-          </div>`;
-        })
+        .map((story) => this.#renderStoryItemHTML(story, false, -1)) // index -1 karena bukan item pertama
         .join("")
     );
 
@@ -224,7 +255,7 @@ export default class HomePage {
       const longitude =
         story.lon || (story.location && story.location.longitude);
       const storyUserId = String(story.userId || (story.user && story.user.id));
-      const isCurrentUser = storyUserId === currentUserId;
+      const isCurrentUser = currentUserId === storyUserId;
 
       if (latitude && longitude) {
         this.#addMarker({
@@ -238,13 +269,11 @@ export default class HomePage {
       }
     });
 
-    // Cek apakah ini halaman terakhir
     if (newStories.length < this.#storiesPerLoad) {
-      document.getElementById("load-more-container").innerHTML = ""; // Sembunyikan tombol
+      document.getElementById("load-more-container").innerHTML = ""; 
     }
   }
 
-  // 8. TAMBAHKAN FUNGSI UNTUK SETUP TOMBOL
   #setupLoadMoreButton() {
     const container = document.getElementById("load-more-container");
 
@@ -265,7 +294,6 @@ export default class HomePage {
     });
   }
 
-  // 9. TAMBAHKAN FUNGSI UNTUK UI LOADING TOMBOL
   #showLoadMoreLoading(isLoading) {
     const button = document.getElementById("load-more-btn");
     if (!button) return;
@@ -280,16 +308,74 @@ export default class HomePage {
   }
 
   #addMarker({
-    // ... (fungsi #addMarker Anda tetap sama) ...
+    coordinate,
+    title,
+    description,
+    photoUrl = null,
+    isCurrentUser = false,
+    id = null,
   }) {
-    // ...
+    const icon = L.icon({
+      iconUrl: isCurrentUser
+        ? "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png"
+        : "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowUrl:
+        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+      shadowSize: [41, 41],
+      shadowAnchor: [12, 41],
+    });
+
+    const popupContent = `
+      <div class="marker-popup" style="max-width: 200px;">
+        <h4 class="marker-title" style="margin: 0 0 8px 0; color: ${
+          isCurrentUser ? "#2563eb" : "#dc2626"
+        }">${title}</h4>
+        ${
+          photoUrl
+            ? `<img src="${photoUrl}" alt="Foto cerita" style="width: 100%; border-radius: 4px; margin: 8px 0;" />`
+            : ""
+        }
+        <p style="margin: 8px 0;">${description}</p>
+        <p style="margin: 4px 0; font-size: 0.875rem; color: ${
+          isCurrentUser ? "#2563eb" : "#dc2626"
+        }">
+          <strong>${isCurrentUser ? "Story Saya" : "Story User"}</strong>
+        </p>
+      </div>
+    `;
+
+    const marker = L.marker(coordinate, { icon })
+      .bindPopup(popupContent)
+      .addTo(this.#map);
+
+    if (id) {
+      marker.storyId = id;
+    }
+
+    this.#markers.push(marker);
+
+    return marker;
   }
 
   showError(message) {
-    // ... (fungsi showError Anda tetap sama) ...
+    const container = document.getElementById("stories-list");
+    container.innerHTML = `<p class="error-message">Error: ${message}</p>`;
+
+    if (message.includes("401") || message.includes("unauthorized")) {
+      localStorage.removeItem("access_token");
+      setTimeout(() => {
+        window.location.hash = "/login";
+      }, 2000);
+    }
   }
 
   #addFadeInEffect() {
-    // ... (fungsi #addFadeInEffect Anda tetap sama) ...
+    const container = document.querySelector(".container");
+    if (container) {
+      container.classList.add("fade-in");
+    }
   }
 }

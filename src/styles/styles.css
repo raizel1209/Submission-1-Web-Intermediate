@@ -501,4 +501,33 @@ footer {
     border-radius: 8px;
     margin-top: 5px;
   }
+  .story-item {
+  /* ... (style .story-item Anda yang ada) ... */
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease;
+  position: relative; /* <-- Tambahkan ini */
+}
+
+/* --- TAMBAHKAN STYLE BARU INI --- */
+.pending-story {
+  opacity: 0.7;
+  border: 2px dashed #8b00cc;
+}
+
+.pending-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: #ffc107;
+  color: #222;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  z-index: 2;
+}
 }
