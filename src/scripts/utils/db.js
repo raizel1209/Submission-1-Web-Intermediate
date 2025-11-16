@@ -5,7 +5,7 @@ const STORIES_STORE = 'stories';
 const SYNC_STORE = 'sync-stories';
 const BOOKMARKS_STORE = 'bookmarks';
 
-const dbPromise = openDB(DB_NAME, 1, {
+const dbPromise = openDB(DB_NAME, 2, {
   upgrade(db) {
     // (Basic +2) Object store untuk menyimpan cerita
     if (!db.objectStoreNames.contains(STORIES_STORE)) {
