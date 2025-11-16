@@ -531,3 +531,9 @@ footer {
   z-index: 2;
 }
 }
+
+.bookmark-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}

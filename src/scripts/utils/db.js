@@ -3,6 +3,7 @@ import { openDB } from 'idb';
 const DB_NAME = 'story-db';
 const STORIES_STORE = 'stories';
 const SYNC_STORE = 'sync-stories';
+const BOOKMARKS_STORE = 'bookmarks';
 
 const dbPromise = openDB(DB_NAME, 1, {
   upgrade(db) {
@@ -13,6 +14,9 @@ const dbPromise = openDB(DB_NAME, 1, {
     // (Advanced +4) Object store untuk sinkronisasi cerita baru saat offline
     if (!db.objectStoreNames.contains(SYNC_STORE)) {
       db.createObjectStore(SYNC_STORE, { autoIncrement: true, keyPath: 'id' });
+    }
+    if (!db.objectStoreNames.contains(BOOKMARKS_STORE)) {
+      db.createObjectStore(BOOKMARKS_STORE, { keyPath: 'id' });
     }
   },
 });
@@ -47,4 +51,20 @@ export const syncDb = {
   async delete(id) {
     return (await dbPromise).delete(SYNC_STORE, id);
   },
-}
+};
+
+// 3. TAMBAHKAN OBJEK BARU UNTUK MENGELOLA BOOKMARK
+export const bookmarkDb = {
+  async get(id) {
+    return (await dbPromise).get(BOOKMARKS_STORE, id);
+  },
+  async getAll() {
+    return (await dbPromise).getAll(BOOKMARKS_STORE);
+  },
+  async put(story) {
+    return (await dbPromise).put(BOOKMARKS_STORE, story);
+  },
+  async delete(id) {
+    return (await dbPromise).delete(BOOKMARKS_STORE, id);
+  },
+};

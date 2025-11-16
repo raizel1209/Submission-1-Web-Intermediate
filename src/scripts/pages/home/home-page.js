@@ -2,6 +2,7 @@ import HomePresenter from "./home-presenter";
 import * as ApiService from "../../data/api";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { bookmarkDb } from '../../utils/db';
 
 export default class HomePage {
   #presenter = null;
@@ -10,7 +11,8 @@ export default class HomePage {
   #currentPage = 1;
   #storiesPerLoad = 15;
   #isLoading = false;
-  #blobUrls = []; // <-- Properti untuk melacak blob URL
+  #blobUrls = []; 
+  #allStories = new Map(); // <-- 2. TAMBAHKAN PROPERTI INI
 
   async render() {
     const token = localStorage.getItem("access_token");
@@ -71,6 +73,7 @@ export default class HomePage {
       await this.#presenter.showInitialStories(this.#storiesPerLoad);
       
       this.#setupLoadMoreButton();
+      this.#setupBookmarkButtonListener();
       this.#addFadeInEffect();
     } catch (error) {
       this.showError(error.message);
@@ -97,6 +100,7 @@ export default class HomePage {
   // --- Buat Fungsi Helper Baru Untuk Render Item ---
   #renderStoryItemHTML(story, isPending = false, index = -1) {
     let imageUrl, name, description, createdAt, locationHtml, storyClass, pendingBadge, tabIndex;
+    let bookmarkButtonHtml = ''; // <-- 4. Siapkan HTML untuk tombol
 
     const currentUserId = String(localStorage.getItem("user_id"));
 
@@ -117,6 +121,9 @@ export default class HomePage {
       // Beri ID 'first-story' jika ini item pertama
       tabIndex = index === 0 ? 'id="first-story" tabindex="0"' : '';
     } else {
+      // 5. SIMPAN CERITA KE MAP
+      this.#allStories.set(story.id, story);
+
       // --- Logika untuk SYNCED STORY ---
       const storyUserId = String(story.userId || (story.user && story.user.id));
       const isCurrentUser = storyUserId === currentUserId;
@@ -132,6 +139,12 @@ export default class HomePage {
       pendingBadge = "";
       // Beri ID 'first-story' hanya jika index 0 (dan tidak ada pending)
       tabIndex = index === 0 ? 'id="first-story" tabindex="0"' : '';
+
+      // 6. TAMBAHKAN CONTAINER UNTUK TOMBOL BOOKMARK
+      bookmarkButtonHtml = `
+        <div class="bookmark-button-container" data-story-id="${story.id}" style="margin-top: 10px;">
+          </div>
+      `;
     }
 
     return `
@@ -146,11 +159,12 @@ export default class HomePage {
         <p>${description}</p>
         <p><strong>Dibuat pada:</strong> ${createdAt}</p>
         ${locationHtml}
+        ${bookmarkButtonHtml}
       </div>`;
   }
 
   // --- Ubah Fungsi showStories ---
-  showStories(stories, pendingStories = []) {
+  async showStories(stories, pendingStories = []) {
     const container = document.getElementById("stories-list");
 
     // Bersihkan blob URL lama (jika ada) untuk mencegah memory leak
@@ -222,17 +236,19 @@ export default class HomePage {
       this.#map.fitBounds(group.getBounds());
     }
 
+    await this.#renderBookmarkButtons(); // <-- 9. RENDER TOMBOL BOOKMARK
+
     // --- Logika Tombol "Load More" ---
     const loadMoreContainer = document.getElementById("load-more-container");
     if (stories.length < this.#storiesPerLoad) {
-      loadMoreContainer.innerHTML = ""; 
+      loadMoreContainer.innerHTML = "";
     } else {
       loadMoreContainer.innerHTML = `<button id="load-more-btn" class="btn">Muat ${this.#storiesPerLoad} Cerita Lainnya</button>`;
     }
   }
 
   // --- Ubah Fungsi appendStories ---
-  appendStories(newStories) {
+  async appendStories(newStories) {
     const container = document.getElementById("stories-list");
     const currentUserId = String(localStorage.getItem("user_id"));
 
@@ -269,9 +285,76 @@ export default class HomePage {
       }
     });
 
+    // 10. RENDER TOMBOL BOOKMARK HANYA UNTUK ITEM BARU
+    await this.#renderBookmarkButtons(newStories.map(s => s.id));
+
     if (newStories.length < this.#storiesPerLoad) {
-      document.getElementById("load-more-container").innerHTML = ""; 
+      document.getElementById("load-more-container").innerHTML = "";
     }
+  }
+
+  // 11. TAMBAHKAN FUNGSI BARU UNTUK LISTENER BOOKMARK
+  #setupBookmarkButtonListener() {
+    const storyList = document.getElementById("stories-list");
+    storyList.addEventListener("click", async (event) => {
+      const button = event.target.closest(".bookmark-btn");
+      if (!button) return;
+
+      event.preventDefault();
+      const storyId = button.dataset.storyId;
+      const story = this.#allStories.get(storyId);
+      if (!story) return;
+
+      const isBookmarked = button.dataset.bookmarked === 'true';
+
+      if (isBookmarked) {
+        await bookmarkDb.delete(storyId);
+        button.textContent = "Bookmark";
+        button.dataset.bookmarked = "false";
+        button.classList.add("btn-outline");
+      } else {
+        await bookmarkDb.put(story);
+        button.textContent = "Bookmarked";
+        button.dataset.bookmarked = "true";
+        button.classList.remove("btn-outline");
+      }
+    });
+  }
+
+  // 12. TAMBAHKAN FUNGSI BARU UNTUK MERENDER TOMBOL
+  async #renderBookmarkButtons(storyIds = null) {
+    const bookmarks = await bookmarkDb.getAll();
+    const bookmarkedIds = new Set(bookmarks.map(b => b.id));
+
+    let containers;
+    if (storyIds) {
+      // Hanya update container untuk storyId yang baru
+      containers = storyIds.map(id =>
+        document.querySelector(`.bookmark-button-container[data-story-id="${id}"]`)
+      ).filter(Boolean);
+    } else {
+      // Update semua container
+      containers = document.querySelectorAll(".bookmark-button-container");
+    }
+
+    containers.forEach(container => {
+      const storyId = container.dataset.storyId;
+      if (!storyId) {
+        container.innerHTML = "";
+        return;
+      }
+
+      const isBookmarked = bookmarkedIds.has(storyId);
+      container.innerHTML = `
+        <button
+          class="btn bookmark-btn ${isBookmarked ? '' : 'btn-outline'}"
+          data-story-id="${storyId}"
+          data-bookmarked="${isBookmarked}"
+        >
+          ${isBookmarked ? 'Bookmarked' : 'Bookmark'}
+        </button>
+      `;
+    });
   }
 
   #setupLoadMoreButton() {
